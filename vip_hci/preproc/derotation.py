@@ -59,7 +59,7 @@ def frame_rotate(array, angle, imlib='opencv', interpolation='bicubic', cxy=None
     """
     if not array.ndim == 2:
         raise TypeError('Input array is not a frame or 2d array.')
-
+    array = np.float32(array)
     y, x = array.shape
 
     if not cxy:
@@ -131,15 +131,9 @@ def cube_derotate(array, angle_list, imlib='opencv', interpolation='bicubic',
         the 'bicubic' the slowest of the three. The 'nearneig' is the poorer
         option for interpolation of noisy astronomical images.
     cxy : tuple of int, optional
-<<<<<<< HEAD:vip/preproc/derotation.py
         Coordinates X,Y  of the point with respect to which the rotation will be
         performed. By default the rotation is done with respect to the center
         of the frames, as it is returned by the function vip.var.frame_center.
-=======
-        Coordinates X,Y  of the point with respect to which the rotation will be 
-        performed. By default the rotation is done with respect to the center 
-        of the frames, as it is returned by the function vip_hci.var.frame_center. 
->>>>>>> 3bf9edb7f4129af6591c67341fd3048fce28df4a:vip_hci/preproc/derotation.py
     collapse : {'median','mean'}
         Way of collapsing the derotated cube.
 
