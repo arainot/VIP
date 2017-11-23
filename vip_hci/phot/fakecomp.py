@@ -5,7 +5,6 @@ Module with fake companion injection functions.
 """
 
 from __future__ import division
-from __future__ import print_function
 
 __author__ = 'C. Gomez @ ULg'
 __all__ = ['create_psf_template',
@@ -61,7 +60,6 @@ def inject_fcs_cube(array, psf_template, angle_list, flevel, plsc, rad_dists,
         Output array with the injected fake companions.
 
     """
-<<<<<<< HEAD:vip/phot/fakecomp.py
 
     if not (array.ndim==3 or array.ndim==4):
         raise TypeError('Array is not a cube, 3d or 4d array')
@@ -115,50 +113,6 @@ def inject_fcs_cube(array, psf_template, angle_list, flevel, plsc, rad_dists,
 
     # 4d case
     if array.ndim==4 and psf_template.ndim==3:
-=======
-    if not array.ndim==3: 
-        raise TypeError('Array is not a cube or 3d array')
-    
-    ceny, cenx = frame_center(array[0])
-    rad_dists = np.array(rad_dists)
-    if not rad_dists[-1]<array[0].shape[0]/2.:
-        msg = 'rad_dists last location is at the border (or outside) of the field'
-        raise ValueError(msg)
-    
-    size_fc = psf_template.shape[0]
-    nframes = array.shape[0]
-    fc_fr = np.zeros_like(array[0], dtype=np.float64)  # TODO: why float64?
-    n_fc_rad = rad_dists.shape[0]
-
-    w = int(np.floor(size_fc/2.))
-    # fcomp in the center of a zeros frame
-    fc_fr[int(ceny-w):int(ceny+w+1), int(cenx-w):int(cenx+w+1)] = psf_template
-
-    array_out = np.zeros_like(array)
-    for fr in range(nframes):
-        tmp = np.zeros_like(array[0])
-        for branch in range(n_branches):
-            ang = (branch * 2 * np.pi / n_branches) + np.deg2rad(theta)
-            for i in range(n_fc_rad):
-                rad = rad_dists[i]                                         
-                y = rad * np.sin(ang - np.deg2rad(angle_list[fr]))
-                x = rad * np.cos(ang - np.deg2rad(angle_list[fr]))
-                tmp += frame_shift(fc_fr, y, x, imlib=imlib)*flevel
-        array_out[fr] = array[fr] + tmp
-    
-    if verbose:
-        for branch in range(n_branches):
-            print('Branch '+str(branch+1)+':')
-            for i in range(n_fc_rad):
-                ang = (branch * 2 * np.pi / n_branches) + np.deg2rad(theta)
-                posy = rad_dists[i] * np.sin(ang) + ceny
-                posx = rad_dists[i] * np.cos(ang) + cenx
-                rad_arcs = rad_dists[i]*plsc
-                msg ='\t(X,Y)=({:.2f}, {:.2f}) at {:.2f} arcsec ({:.2f} pxs)'
-                print(msg.format(posx, posy, rad_arcs, rad_dists[i]))
-        
-    return array_out
->>>>>>> 3bf9edb7f4129af6591c67341fd3048fce28df4a:vip_hci/phot/fakecomp.py
 
         ceny, cenx = frame_center(array[0,0])
         ceny = int(float(ceny))
@@ -292,15 +246,9 @@ def create_psf_template(array, size, fwhm=4, verbose=True, collapse='mean'):
         raise TypeError('Collapse mode not recognized.')
 
     psf_normd = psf_norm(psf, size=size, fwhm=fwhm)
-<<<<<<< HEAD:vip/phot/fakecomp.py
 
     if verbose:
         print "Done scaled PSF template from the average of", n,"frames."
-=======
-    
-    if verbose:  
-        print("Done scaled PSF template from the average of", n,"frames.")
->>>>>>> 3bf9edb7f4129af6591c67341fd3048fce28df4a:vip_hci/phot/fakecomp.py
     return psf_normd
 
 
@@ -359,7 +307,7 @@ def psf_norm(array, fwhm=4, size=None, threshold=None, mask_core=None,
                                                    method='exact')
     fwhm_flux = np.array(fwhm_aper_phot['aperture_sum'])
     if verbose:
-        print("Flux in 1xFWHM aperture: {}".format(fwhm_flux))
+        print "Flux in 1xFWHM aperture: {}".format(fwhm_flux)
 
     if fwhm_flux>1.1 or fwhm_flux<0.9:
         psf_norm_array = psfs/np.array(fwhm_aper_phot['aperture_sum'])
