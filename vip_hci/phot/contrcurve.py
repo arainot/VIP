@@ -133,9 +133,9 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
         3d array with 3 frames containing the position of the companions in the
         3 patterns.
     """
-    if not cube.ndim == 3:
-        raise TypeError('The input array is not a cube')
-    if not cube.shape[0] == angle_list.shape[0]:
+    if not (cube.ndim == 3 or cube.ndim == 4):
+        raise TypeError('The input array is not a 3D or 4D cube')
+    if not (cube.shape[0] == angle_list.shape[0] or cube.shape[1] == angle_list.shape[0]):
         raise TypeError('Input vector or parallactic angles has wrong length')
     if not psf_template.ndim==2:
         raise TypeError('Template PSF is not a frame')
@@ -438,18 +438,36 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
     array = cube
     parangles = angle_list
 
-    if not array.ndim == 3:
-        raise TypeError('The input array is not a cube')
-    if not array.shape[0] == parangles.shape[0]:
-        raise TypeError('Input vector or parallactic angles has wrong length')
-    if not psf_template.ndim==2:
-        raise TypeError('Template PSF is not a frame or 2d array')
+    if not (array.ndim==3 or array.ndim==4):
+        raise TypeError('The input array is not a 3D or 4D cube')
+    else:
+        if array.ndim==3:
+            if not array.shape[0] == parangles.shape[0]:
+                raise TypeError('Input vector or parallactic angles has wrong length')
+            if not psf_template.ndim==2:
+                raise TypeError('Template PSF is not a frame, 2d array')
+            if not fc_rad_sep>=3 or not fc_rad_sep<=int((array.shape[1]/2.)/fwhm)-1:
+                msg = 'Too large separation between companions in the radial patterns. '
+                msg += 'Should lie between 3 and {:}'
+                raise ValueError(msg.format(int((array.shape[1]/2.)/fwhm)-1))
+
+        elif array.ndim==4:
+            if not array.shape[1] == parangles.shape[0]:
+                raise TypeError('Input vector or parallactic angles has wrong length')
+            if not psf_template.ndim==3:
+                raise TypeError('Template PSF is not a frame, 3d array')
+            if not algo_dict.has_key('scale_list'):
+                raise ValueError('Vector of wavelength not found')
+            else:
+                if not algo_dict['scale_list'].shape[0] == array.shape[0]:
+                    raise TypeError('Input vector or wavelength array has wrong length')
+                if not fc_rad_sep>=3 or not fc_rad_sep<=int((array.shape[2]/2.)/fwhm)-1:
+                    msg = 'Too large separation between companions in the radial patterns. '
+                    msg += 'Should lie between 3 and {:}'
+                    raise ValueError(msg.format(int((array.shape[2]/2.)/fwhm)-1))
+
     if not hasattr(algo, '__call__'):
         raise TypeError('Parameter *algo* must be a callable function')
-    if not fc_rad_sep>=3 or not fc_rad_sep<=int((array.shape[1]/2.)/fwhm)-1:
-        msg = 'Too large separation between companions in the radial patterns. '
-        msg += 'Should lie between 3 and {:}'
-        raise ValueError(msg.format(int((array.shape[1]/2.)/fwhm)-1))
     if not isinstance(inner_rad, int):
         raise TypeError('inner_rad must be an integer')
     angular_range = wedge[1]-wedge[0]
@@ -483,7 +501,15 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
 
     # We crop the PSF and check if PSF has been normalized (so that flux in
     # 1*FWHM aperture = 1) and fix if needed
-    psf_template = psf_norm(psf_template, size=3*fwhm, fwhm=fwhm)
+    if cube.ndim==3:
+        psf_template = psf_norm(psf_template, size=3*fwhm, fwhm=fwhm)
+    elif cube.ndim==4:
+        for i in range(psf_template.shape[0]):
+            psf_temp = psf_norm(psf_template[i], size=3*fwhm, fwhm=fwhm)
+            if i==0:
+                psf_crop = np.zeros((len(psf_template),psf_temp.shape[0],psf_temp.shape[1]))
+            psf_crop[i] = psf_temp
+        psf_template = psf_crop # Reset the psf_template variable to the 3rd dim variable
 
     #***************************************************************************
     # Initialize the fake companions
@@ -491,12 +517,15 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
     # signal-to-noise ratio of injected fake companions
     snr_level = fc_snr * np.ones_like(noise)
     
-    thruput_arr = np.zeros((nbranch, noise.shape[0]))
-    fc_map_all = np.zeros((nbranch*fc_rad_sep, array.shape[1], array.shape[2]))
+    if cube.ndim==3:
+        fc_map_all = np.zeros((nbranch*fc_rad_sep, array.shape[1], array.shape[2]))
+        cube_fc_all = np.zeros((nbranch*fc_rad_sep, array.shape[0], array.shape[1], array.shape[2]))
+        cy, cx = frame_center(array[0])
+    elif cube.ndim==4:
+        fc_map_all = np.zeros((nbranch*fc_rad_sep, array.shape[0], array.shape[2], array.shape[3]))
+        cube_fc_all = np.zeros((nbranch*fc_rad_sep, array.shape[0], array.shape[1], array.shape[2], array.shape[3]))
+        cy, cx = frame_center(array[0,0])
     frame_fc_all = fc_map_all.copy()
-    cube_fc_all = np.zeros((nbranch*fc_rad_sep, array.shape[0], array.shape[1],
-                            array.shape[2]))
-    cy, cx = frame_center(array[0])
 
     # each branch is computed separately
     for br in range(nbranch):
@@ -506,16 +535,28 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
             radvec = vector_radd[irad::fc_rad_sep]
             cube_fc = array.copy()
             # filling map with small numbers
-            fc_map = np.ones_like(array[0]) * 1e-6
+            if cube.ndim==3:
+                fc_map = np.ones_like(array[0]) * 1e-6
+            elif cube.ndim==4:
+                thetavec = range(int(theta),int(theta)+360,int(360/len(radvec))) # In 4D we need to define a range of parallactic angle
+                fc_map = np.ones_like(array[:,0]) * 1e-6
             fcy = []; fcx = []
             for i in range(radvec.shape[0]):
                 flux = snr_level[irad+i*fc_rad_sep] * noise[irad+i*fc_rad_sep]
-                cube_fc = cube_inject_companions(cube_fc, psf_template, parangles, flux,
-                                                 pxscale, rad_dists=[radvec[i]],
-                                                 theta=br*angle_branch + theta, imlib=imlib,
-                                                 verbose=False)
-                y = cy + radvec[i] * np.sin(np.deg2rad(br*angle_branch + theta))
-                x = cx + radvec[i] * np.cos(np.deg2rad(br*angle_branch + theta))
+                if cube.ndim==3:
+                    cube_fc = inject_fcs_cube(cube_fc, psf_template, parangles, flux,
+                                              pxscale, rad_dists=[radvec[i]],
+                                              theta=br*angle_branch + theta,
+                                              verbose=False)
+                    y = cy + radvec[i] * np.sin(np.deg2rad(br*angle_branch + theta))
+                    x = cx + radvec[i] * np.cos(np.deg2rad(br*angle_branch + theta))
+                elif cube.ndim==4:
+                    cube_fc = inject_fcs_cube(cube_fc, psf_template, parangles, flux,
+                                              pxscale, rad_dists=[radvec[i]],
+                                              theta=thetavec[i],
+                                              verbose=False)
+                    y = cy + radvec[i] * np.sin(np.deg2rad(br*angle_branch + thetavec[i]))
+                    x = cx + radvec[i] * np.cos(np.deg2rad(br*angle_branch + thetavec[i]))
                 fc_map = frame_inject_companion(fc_map, psf_template, y, x, flux)
                 fcy.append(y); fcx.append(x)
 
@@ -540,8 +581,13 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
                 timing(start_time)
 
             #*******************************************************************
-            injected_flux = aperture_flux(fc_map, fcy, fcx, fwhm, ap_factor=1,
-                                          mean=False, verbose=False)
+            if cube.ndim==3:
+                injected_flux = aperture_flux(fc_map, fcy, fcx, fwhm, ap_factor=1,
+                                            mean=False, verbose=False)
+            elif cube.ndim==4:
+                injected_flux = [aperture_flux(fc_map[i], fcy, fcx, fwhm, ap_factor=1,
+                                            mean=False, verbose=False) for i in range(array.shape[0])]
+                injected_flux = np.median(injected_flux, axis=0)
             recovered_flux = aperture_flux((frame_fc - frame_nofc), fcy, fcx,
                                            fwhm, ap_factor=1, mean=False,
                                            verbose=False)
@@ -551,7 +597,10 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
             thruput_arr[br, irad::fc_rad_sep] = thruput
             fc_map_all[br*fc_rad_sep+irad, :, :] = fc_map
             frame_fc_all[br*fc_rad_sep+irad, :, :] = frame_fc
-            cube_fc_all[br*fc_rad_sep+irad, :, :, :] = cube_fc
+            if cube.ndim==3:
+                cube_fc_all[br*fc_rad_sep+irad, :, :, :] = cube_fc
+            elif cube.ndim==4:
+                cube_fc_all[br*fc_rad_sep+irad, :, :, :, :] = cube_fc
 
     if verbose:
         print('Finished measuring the throughput in {:} branches'.format(nbranch))
