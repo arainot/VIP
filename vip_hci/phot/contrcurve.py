@@ -31,7 +31,7 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
                    algo, sigma=5, nbranch=1, theta=0, inner_rad=1, wedge=(0,360),
                    fc_snr=10.0, student=True, transmission=None, smooth=True,
                    plot=True, dpi=100, imlib='opencv', debug=False, verbose=True, full_output=False,
-                   save_plot=None, object_name=None, frame_size=None, 
+                   save_plot=None, object_name=None, frame_size=None,
                    fix_y_lim=(), figsize=(8,4), **algo_dict):
     """ Computes the contrast curve for a given SIGMA (*sigma*) level. The
     contrast is calculated as sigma*noise/throughput. This implementation takes
@@ -96,7 +96,7 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
         of contrast.
     verbose : {True, False, 0, 1, 2} optional
         If True or 1 the function prints to stdout intermediate info and timing,
-        if set to 2 more output will be shown. 
+        if set to 2 more output will be shown.
     full_output : {False, True}, bool optional
         If True returns intermediate arrays.
     save_plot: string
@@ -118,7 +118,7 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
         Student parameter is True), the interpolated throughput, the distance in
         pixels, the noise and the sigma corrected (if Student is True).
 
-    If full_output is True then the function returns: 
+    If full_output is True then the function returns:
         datafr, cube_fc_all, frame_fc_all, frame_nofc and fc_map_all.
 
     cube_fc_all : array_like
@@ -137,8 +137,8 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
         raise TypeError('The input array is not a 3D or 4D cube')
     if not (cube.shape[0] == angle_list.shape[0] or cube.shape[1] == angle_list.shape[0]):
         raise TypeError('Input vector or parallactic angles has wrong length')
-    if not psf_template.ndim==2:
-        raise TypeError('Template PSF is not a frame')
+    if not (psf_template.ndim==2 or psf_template.ndim==3):
+        raise TypeError('Template PSF is not a 2D or 3D frame')
     if transmission is not None:
         if not isinstance(transmission, tuple) or not len(transmission)==2:
             raise TypeError('transmission must be a tuple with 2 1d vectors')
@@ -309,7 +309,7 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
         # Optionally, save the figure to a path
         if save_plot is not None:
             fig.savefig(save_plot, dpi=100)
-            
+
         if debug:
             fig2 = plt.figure(figsize=figsize, dpi=dpi)
             ax3 = fig2.add_subplot(111)
@@ -351,7 +351,7 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
 
     if full_output:
         return (datafr, cube_fc_all, frame_fc_all, frame_nofc, fc_map_all)
-    else: 
+    else:
         return datafr
 
 
@@ -516,7 +516,7 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
     angle_branch = angular_range / nbranch
     # signal-to-noise ratio of injected fake companions
     snr_level = fc_snr * np.ones_like(noise)
-    
+
     if cube.ndim==3:
         fc_map_all = np.zeros((nbranch*fc_rad_sep, array.shape[1], array.shape[2]))
         cube_fc_all = np.zeros((nbranch*fc_rad_sep, array.shape[0], array.shape[1], array.shape[2]))
@@ -544,14 +544,14 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
             for i in range(radvec.shape[0]):
                 flux = snr_level[irad+i*fc_rad_sep] * noise[irad+i*fc_rad_sep]
                 if cube.ndim==3:
-                    cube_fc = inject_fcs_cube(cube_fc, psf_template, parangles, flux,
+                    cube_fc = cube_inject_companions(cube_fc, psf_template, parangles, flux,
                                               pxscale, rad_dists=[radvec[i]],
                                               theta=br*angle_branch + theta,
                                               verbose=False)
                     y = cy + radvec[i] * np.sin(np.deg2rad(br*angle_branch + theta))
                     x = cx + radvec[i] * np.cos(np.deg2rad(br*angle_branch + theta))
                 elif cube.ndim==4:
-                    cube_fc = inject_fcs_cube(cube_fc, psf_template, parangles, flux,
+                    cube_fc = cube_inject_companions(cube_fc, psf_template, parangles, flux,
                                               pxscale, rad_dists=[radvec[i]],
                                               theta=thetavec[i],
                                               verbose=False)
@@ -594,6 +594,7 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
             thruput = (recovered_flux)/injected_flux
             thruput[np.where(thruput<0)] = 0
 
+            thruput_arr = np.zeros((nbranch, noise.shape[0]))
             thruput_arr[br, irad::fc_rad_sep] = thruput
             fc_map_all[br*fc_rad_sep+irad, :, :] = fc_map
             frame_fc_all[br*fc_rad_sep+irad, :, :] = frame_fc
