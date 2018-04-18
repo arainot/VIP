@@ -25,9 +25,9 @@ from ..var import get_annulus, frame_center, dist, pp_subplots
 
 
 def snrmap(array, fwhm, plot=False, mode='sss', source_mask=None, nproc=None):
-    """Parallel implementation of the SNR map generation function. Applies the 
+    """Parallel implementation of the SNR map generation function. Applies the
     S/N function (small samples penalty) at each pixel.
-    
+
     Parameters
     ----------
     array : array_like
@@ -35,28 +35,28 @@ def snrmap(array, fwhm, plot=False, mode='sss', source_mask=None, nproc=None):
     fwhm : float
         Size in pixels of the FWHM.
     plot : {False, True}, bool optional
-        If True plots the SNR map. 
+        If True plots the SNR map.
     mode : {'sss', 'peakstddev'}, string optional
         'sss' uses the approach with the small sample statistics penalty and
         'peakstddev' uses the peak(aperture)/std(annulus) version.
     source_mask : array_like, optional
         If exists, it takes into account existing sources. The mask is a ones
-        2d array, with the same size as the input frame. The centers of the 
+        2d array, with the same size as the input frame. The centers of the
         known sources have a zero value.
     nproc : int or None
         Number of processes for parallel computing.
-    
+
     Returns
     -------
     snrmap : array_like
         Frame with the same size as the input frame with each pixel.
-        
+
     """
     start_time = time_ini()
     if not array.ndim==2:
         raise TypeError('Input array is not a 2d array or image.')
     if plot:  plt.close('snr')
-        
+
     sizey, sizex = array.shape
     snrmap = np.zeros_like(array)
     width = min(sizey,sizex)/2 - 1.5*fwhm
@@ -64,22 +64,22 @@ def snrmap(array, fwhm, plot=False, mode='sss', source_mask=None, nproc=None):
     mask = np.ma.make_mask(mask)
     yy, xx = np.where(mask)
     coords = zip(xx,yy)
-        
-    if not nproc:  
+
+    if not nproc:
         nproc = int((cpu_count()/2))  # Hyper-threading doubles the # of cores
-    
+
     if mode == 'sss':
         F = snr_ss
     elif mode == 'peakstddev':
         F = snr_peakstddev
     else:
         raise TypeError('\nMode not recognized.')
-    
+
     if source_mask is None:
-        pool = Pool(processes=int(nproc))                                        
+        pool = Pool(processes=int(nproc))
         res = pool.map(eval_func_tuple, itt.izip(itt.repeat(F),itt.repeat(array),
                                                  coords, itt.repeat(fwhm),
-                                                 itt.repeat(True)))       
+                                                 itt.repeat(True)))
         res = np.array(res)
         pool.close()
         yy = res[:,0]
@@ -96,7 +96,7 @@ def snrmap(array, fwhm, plot=False, mode='sss', source_mask=None, nproc=None):
         if source_mask[source_mask == 0].shape[0] > 20:
             msg = 'Input source mask is too crowded. Check its validity.'
             raise RuntimeError(msg)
-        
+
         soury, sourx = np.where(source_mask == 0)
         sources = []
         ciry = []; cirx = []; anny = []; annx = []
@@ -106,11 +106,11 @@ def snrmap(array, fwhm, plot=False, mode='sss', source_mask=None, nproc=None):
             radd = dist(centery, centerx, y, x)
             if int(np.floor(radd)) < centery - np.ceil(fwhm):
                 sources.append((y,x))
-        
+
         for source in sources:
-            y, x = source        
+            y, x = source
             radd = dist(centery, centerx, y, x)
-            tempay, tempax = get_annulus(array, int(np.floor(radd-fwhm)), 
+            tempay, tempax = get_annulus(array, int(np.floor(radd-fwhm)),
                                     int(np.ceil(2*fwhm)), output_indices=True)
             tempcy, tempcx = draw.circle(y, x, int(np.ceil(1*fwhm)))
             # masking the source position (using the MAD of pixels in annulus)
@@ -123,42 +123,42 @@ def snrmap(array, fwhm, plot=False, mode='sss', source_mask=None, nproc=None):
 
         # coordinates of the rest of the frame without the annulus
         coor_rest = [(y,x) for (y,x) in zip(yy, xx) if (y,x) not in coor_ann]
-        
+
         pool1 = Pool(processes=int(nproc))
         res = pool1.map(eval_func_tuple, itt.izip(itt.repeat(F),itt.repeat(array),
                                                   coor_rest, itt.repeat(fwhm),
-                                                  itt.repeat(True)))       
+                                                  itt.repeat(True)))
         res = np.array(res)
         pool1.close()
         yy = res[:,0]
         xx = res[:,1]
         snr = res[:,2]
         snrmap[yy.astype('int'), xx.astype('int')] = snr
-        
+
         pool2 = Pool(processes=int(nproc))
         res = pool2.map(eval_func_tuple, itt.izip(itt.repeat(F),
                                                   itt.repeat(array_sources),
                                                   coor_ann, itt.repeat(fwhm),
-                                                  itt.repeat(True)))       
+                                                  itt.repeat(True)))
         res = np.array(res)
         pool2.close()
         yy = res[:,0]
         xx = res[:,1]
         snr = res[:,2]
         snrmap[yy.astype('int'), xx.astype('int')] = snr
-    
+
     if plot:  pp_subplots(snrmap, colorb=True, title='S/N map')
-        
+
     print "S/N map created using {:} processes.".format(nproc)
     timing(start_time)
     return snrmap
-   
-   
+
+
 def snrmap_fast(array, fwhm, nproc=None, plot=False, verbose=True):
     """ Serial implementation of the S/N map generation function. To be used as
     a quick proxy of the snrmap generated using the small samples statistics
-    definition. 
-    
+    definition.
+
     Parameters
     ----------
     array : array_like
@@ -168,66 +168,66 @@ def snrmap_fast(array, fwhm, nproc=None, plot=False, verbose=True):
     nproc : int or None
         Number of processes for parallel computing.
     plot : {False, True}, bool optional
-        If True plots the SNR map. 
+        If True plots the SNR map.
     verbose: {True, False}
-        Chooses whether to print results or not. 
-    
+        Chooses whether to print results or not.
+
     Returns
     -------
     snrmap : array_like
         Frame with the same size as the input frame with each pixel.
-        
-    """       
+
+    """
     if verbose:  start_time = time_ini()
     if not array.ndim==2:
         raise TypeError('Input array is not a 2d array or image.')
-    
+
     cy, cx = frame_center(array)
     tophat_kernel = Tophat2DKernel(fwhm/2.)
     array = convolve(array, tophat_kernel)
-            
+
     sizey, sizex = array.shape
     snrmap = np.zeros_like(array)
-    width = min(sizey,sizex)/2 - 1.5*fwhm    
+    width = min(sizey,sizex)/2 - 1.5*fwhm
     mask = get_annulus(array, (fwhm/2)+1, width-1)
     mask = np.ma.make_mask(mask)
     yy, xx = np.where(mask)
     coords = [(x,y) for (x,y) in zip(xx,yy)]
-    
-    if nproc is None:  
+
+    if nproc is None:
         nproc = int((cpu_count()/2))  # Hyper-threading doubles the # of cores
-    
+
     if nproc==1:
         for y,x in zip(yy,xx):
-            snrmap[y,x] = _snr_approx(array, (x,y), fwhm, cy, cx)[2]       
+            snrmap[y,x] = _snr_approx(array, (x,y), fwhm, cy, cx)[2]
     elif nproc>1:
-        pool = Pool(processes=int(nproc))                                        
+        pool = Pool(processes=int(nproc))
         res = pool.map(eval_func_tuple, itt.izip(itt.repeat(_snr_approx),
                                                  itt.repeat(array),
                                                  coords, itt.repeat(fwhm),
                                                  itt.repeat(cy),
-                                                 itt.repeat(cx)))       
+                                                 itt.repeat(cx)))
         res = np.array(res)
         pool.close()
         yy = res[:,0]
         xx = res[:,1]
         snr = res[:,2]
         snrmap[yy.astype('int'), xx.astype('int')] = snr
-        
+
     if plot:  pp_subplots(snrmap, colorb=True, title='SNRmap')
-     
-    if verbose:    
+
+    if verbose:
         print "S/N map created using {:} processes.".format(nproc)
         timing(start_time)
     return snrmap
 
 def _snr_approx(array, (sourcex,sourcey), fwhm, centery, centerx):
     """
-    array - frame convolved with top hat kernel 
+    array - frame convolved with top hat kernel
     """
-    rad = dist(centery,centerx,sourcey,sourcex) 
+    rad = dist(centery,centerx,sourcey,sourcex)
     ind_aper = draw.circle(sourcey, sourcex, fwhm/2.)
-    # noise : STDDEV in convolved array of 1px wide annulus (while 
+    # noise : STDDEV in convolved array of 1px wide annulus (while
     # masking the flux aperture) * correction of # of resolution elements
     ind_ann = draw.circle_perimeter(int(centery), int(centerx), int(rad))
     array2 = array.copy()
@@ -238,18 +238,18 @@ def _snr_approx(array, (sourcex,sourcey), fwhm, centery, centerx):
     signal = array[sourcey, sourcex] - array2[ind_ann].mean()
     snr = signal / noise
     return sourcey, sourcex, snr
-    
-    
-    
-def snr_ss(array, (source_xy), fwhm, out_coor=False, plot=False, 
+
+
+
+def snr_ss(array, (source_xy), fwhm, out_coor=False, plot=False,
            verbose=False, full_output=False):
     # Leave the order of parameters as it is, the same for both snr functions
     # to be compatible with the snrmap parallel implementation
-    """Calculates the SNR (signal to noise ratio) of a single planet in a 
-    post-processed (e.g. by LOCI or PCA) frame. Uses the approach described in 
+    """Calculates the SNR (signal to noise ratio) of a single planet in a
+    post-processed (e.g. by LOCI or PCA) frame. Uses the approach described in
     Mawet et al. 2014 on small sample statistics, where a student t-test (eq. 9)
     can be used to determine S/N (and contrast) in high contrast imaging.
-    
+
     Parameters
     ----------
     array : array_like, 2d
@@ -259,36 +259,36 @@ def snr_ss(array, (source_xy), fwhm, out_coor=False, plot=False,
     fwhm : float
         Size in pixels of the FWHM.
     out_coor: {False, True}, bool optional
-        If True returns back the snr value and the y, x input coordinates. In 
+        If True returns back the snr value and the y, x input coordinates. In
         this case it overrides the full_output parameter.
     plot : {False, True}, bool optional
-        Plots the frame and the apertures considered for clarity. 
+        Plots the frame and the apertures considered for clarity.
     verbose: {True, False}, bool optional
-        Chooses whether to print some output or not. 
+        Chooses whether to print some output or not.
     full_output: {False, True}, bool optional
-        If True returns back the snr value, the y, x input coordinates, noise 
-        and flux.   
-    
+        If True returns back the snr value, the y, x input coordinates, noise
+        and flux.
+
     Returns
     -------
     snr : float
         Value of the SNR for the given planet or test speckle.
-        
+
     sourcey, sourcex, f_source, fluxes.std(), snr
-    
+
     """
     if not array.ndim==2:
         raise TypeError('Input array is not a frame or 2d array')
     if out_coor and full_output:
         raise TypeError('One of the 2 must be False')
-    
-    sourcex, sourcey = source_xy 
-    
+
+    sourcex, sourcey = source_xy
+
     centery, centerx = frame_center(array)
     sep = dist(centery,centerx,sourcey,sourcex)
-    
+
     sens = 'clock' #counterclock
-        
+
     angle = np.arcsin(fwhm/2./sep)*2
     number_apertures = int(np.floor(2*np.pi/angle))
     yy = np.zeros((number_apertures))
@@ -299,14 +299,14 @@ def snr_ss(array, (source_xy), fwhm, out_coor=False, plot=False,
     yy[0] = sourcey - centery
     for i in range(number_apertures-1):
         if sens=='clock':
-            xx[i+1] = cosangle*xx[i] + sinangle*yy[i] 
-            yy[i+1] = cosangle*yy[i] - sinangle*xx[i] 
+            xx[i+1] = cosangle*xx[i] + sinangle*yy[i]
+            yy[i+1] = cosangle*yy[i] - sinangle*xx[i]
         elif sens=='counterclock':
-            xx[i+1] = cosangle*xx[i] - sinangle*yy[i] 
-            yy[i+1] = cosangle*yy[i] + sinangle*xx[i]           
-            
+            xx[i+1] = cosangle*xx[i] - sinangle*yy[i]
+            yy[i+1] = cosangle*yy[i] + sinangle*xx[i]
+
     xx[:] += centerx
-    yy[:] += centery 
+    yy[:] += centery
     rad = fwhm/2.
     apertures = photutils.CircularAperture((xx, yy), r=rad)  # Coordinates (X,Y)
     fluxes = photutils.aperture_photometry(array, apertures, method='exact')
@@ -316,7 +316,7 @@ def snr_ss(array, (source_xy), fwhm, out_coor=False, plot=False,
     fluxes = fluxes[1:]
     n2 = fluxes.shape[0]
     snr = (f_source - fluxes.mean())/(fluxes.std()*np.sqrt(1+(1/n2)))
-    
+
     if verbose:
         msg1 = 'S/N for the given pixel = {:}'
         msg2 = 'Integrated flux in FWHM test aperture = {:.3f}'
@@ -326,41 +326,41 @@ def snr_ss(array, (source_xy), fwhm, out_coor=False, plot=False,
         print msg2.format(f_source)
         print msg3.format(fluxes.mean())
         print msg4.format(fluxes.std())
-    
+
     if plot:
         _, ax = plt.subplots(figsize=(6,6))
         ax.imshow(array, origin='lower', interpolation='nearest', alpha=0.5, cmap='gray')
         for i in range(xx.shape[0]):
             # Circle takes coordinates as (X,Y)
-            aper = plt.Circle((xx[i], yy[i]), radius=fwhm/2., color='r', 
-                              fill=False, alpha=0.8)                                       
+            aper = plt.Circle((xx[i], yy[i]), radius=fwhm/2., color='r',
+                              fill=False, alpha=0.8)
             ax.add_patch(aper)
             cent = plt.Circle((xx[i], yy[i]), radius=0.8, color='r', fill=True,
                               alpha=0.5)
             ax.add_patch(cent)
-            aper_source = plt.Circle((sourcex, sourcey), radius=0.7, 
-                                     color='b', fill=True, alpha=0.5)                                       
+            aper_source = plt.Circle((sourcex, sourcey), radius=0.7,
+                                     color='b', fill=True, alpha=0.5)
             ax.add_patch(aper_source)
         ax.grid('off')
         plt.show()
-    
+
     if out_coor:
         return sourcey, sourcex, snr
     if full_output:
         return sourcey, sourcex, f_source, fluxes.std(), snr
     else:
         return snr
-    
 
-def snr_peakstddev(array, (source_xy), fwhm, out_coor=False, plot=False, 
+
+def snr_peakstddev(array, (source_xy), fwhm, out_coor=False, plot=False,
                    verbose=False):
     """Calculates the S/N (signal to noise ratio) of a single planet in a
-    post-processed (e.g. by LOCI or PCA) frame. The signal is taken as the ratio 
-    of pixel value of the planet (test speckle) and the noise computed as the 
-    standard deviation of the pixels in an annulus at the same radial distance 
-    from the center of the frame. The diameter of the signal aperture and the 
+    post-processed (e.g. by LOCI or PCA) frame. The signal is taken as the ratio
+    of pixel value of the planet (test speckle) and the noise computed as the
+    standard deviation of the pixels in an annulus at the same radial distance
+    from the center of the frame. The diameter of the signal aperture and the
     annulus width is in both cases 1 FWHM ~ 1 lambda/D.
-    
+
     Parameters
     ----------
     array : array_like, 2d
@@ -372,53 +372,49 @@ def snr_peakstddev(array, (source_xy), fwhm, out_coor=False, plot=False,
     out_coor: {False, True}, bool optional
         If True returns back the snr value and the y, x input coordinates.
     plot : {False, True}, optional
-        Plots the frame and the apertures considered for clarity. 
+        Plots the frame and the apertures considered for clarity.
     verbose: {True, False}
-        Chooses whether to print some intermediate results or not.    
-        
+        Chooses whether to print some intermediate results or not.
+
     Returns
     -------
     snr : float
         Value of the SNR for the given planet or test speckle.
-    
-    """     
-    sourcex, sourcey = source_xy 
+
+    """
+    sourcex, sourcey = source_xy
     centery, centerx = frame_center(array)
-    rad = dist(centery,centerx,sourcey,sourcex)  
-    
-    array = array + np.abs(array.min()) 
+    rad = dist(centery,centerx,sourcey,sourcex)
+
+    array = array + np.abs(array.min())
     inner_rad = np.round(rad)-(fwhm/2.)
     an_coor = get_annulus(array, inner_rad, fwhm, output_indices=True)
     ap_coor = draw.circle(sourcey, sourcex, int(np.ceil(fwhm/2.)))
     array2 = array.copy()
     array2[ap_coor] = array[an_coor].mean()   # we 'mask' the flux aperture
     stddev = array2[an_coor].std()
-    peak = array[sourcey, sourcex] 
+    peak = array[sourcey, sourcex]
     snr = peak / stddev
     if verbose:
         msg = "S/N = {:.3f}, Peak px = {:.3f}, Noise = {:.3f}"
         print msg.format(snr, peak, stddev)
-    
+
     if plot:
         _, ax = plt.subplots(figsize=(6,6))
         ax.imshow(array, origin='lower', interpolation='nearest')
-        circ = plt.Circle((centerx, centery), radius=inner_rad, color='r', 
-                          fill=False) 
+        circ = plt.Circle((centerx, centery), radius=inner_rad, color='r',
+                          fill=False)
         ax.add_patch(circ)
-        circ2 = plt.Circle((centerx, centery), radius=inner_rad+fwhm, color='r', 
-                           fill=False) 
+        circ2 = plt.Circle((centerx, centery), radius=inner_rad+fwhm, color='r',
+                           fill=False)
         ax.add_patch(circ2)
-        aper = plt.Circle((sourcex, sourcey), radius=fwhm/2., color='b', 
+        aper = plt.Circle((sourcex, sourcey), radius=fwhm/2., color='b',
                           fill=False)                                           # Coordinates (X,Y)
         ax.add_patch(aper)
         plt.show()
         plt.gray()
-        
+
     if out_coor:
         return sourcey, sourcex, snr
     else:
         return snr
-
-
-
-

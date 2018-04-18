@@ -25,7 +25,7 @@ def cube_shift(cube, y, x, imlib):
     return cube_out
 
 def inject_fcs_cube(array, psf_template, angle_list, flevel, plsc, rad_dists,
-                    n_branches=1, theta=0, imlib='opencv', verbose=True):
+                    n_branches=1, theta=0, imlib='opencv', verbose=False):
     """ Injects fake companions in branches, at given radial distances.
 
     Parameters
@@ -83,8 +83,8 @@ def inject_fcs_cube(array, psf_template, angle_list, flevel, plsc, rad_dists,
 
         w = int(np.floor(size_fc/2.))
         # fcomp in the center of a zeros frame
-        print ceny,cenx,w
-        fc_fr[ceny-w:ceny+w+1, cenx-w:cenx+w+1] = psf_template
+        #print ceny,cenx,w
+        fc_fr[ceny-w:ceny+w, cenx-w:cenx+w] = psf_template #Changed from +1 to +0 - 19/12/2017
 
         array_out = np.zeros_like(array)
         for fr in range(nframes):
@@ -156,8 +156,8 @@ def inject_fcs_cube(array, psf_template, angle_list, flevel, plsc, rad_dists,
                     else:
                         #tmp += cube_shift(fc_fr, y, x, imlib=imlib)*flevel
                         shift = cube_shift(fc_fr, y, x, imlib=imlib)
-                        #tmp += shift * flevel
-                        tmp += [shift[i]*flevel[i] for i in range(len(flevel))]
+                        tmp += shift * flevel
+                        #tmp += [shift[i]*flevel[i] for i in range(len(flevel))]
             array_out[:,fr] = array[:,fr] + tmp
 
         if verbose:
