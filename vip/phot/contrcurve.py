@@ -196,6 +196,8 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
         plt.legend(loc='best')
         #plt.yscale('log')
         plt.xlim(0, np.max(rad_samp[:-30]*pxscale))
+        fig3.savefig("/Users/alan/throughput_ang_sep.pdf")
+        fig4.savefig("/Users/alan/noise_ang_sep.pdf")
 
     # calculating the contrast
     if isinstance(starphot, float) or isinstance(starphot, int):
@@ -245,6 +247,7 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
         plt.grid('on', which='both', alpha=0.2, linestyle='solid')
         ax1.set_yscale('log')
         ax1.set_xlim(0, np.max(rad_samp[:-30]*pxscale))
+        fig.savefig("/Users/alan/contrastcurve.pdf")
 
         if debug:
             fig2 = plt.figure(figsize=(8,4))

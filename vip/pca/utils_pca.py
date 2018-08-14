@@ -306,7 +306,7 @@ def prepare_matrix(array, scaling=None, mask_center_px=None, mode='fullfr',
             return matrix
 
     #4D case
-    if array.ndim==4:
+    if cube.ndim==4:
         if mode == 'annular':
             if annulus_radius is None or annulus_width is None:
                 msgerr = 'Annulus_radius and/or annulus_width can be None in annular '

@@ -74,7 +74,6 @@ def chisquare(modelParameters, cube, angs, plsc, psfs_norm, fwhm, annulus_width,
     cube_negfc = inject_fcs_cube(cube, psfs_norm, angs, flevel=-flux,
                                  plsc=plsc, rad_dists=[r], n_branches=1,
                                  theta=theta, verbose=False)
-    #print ("initial State",initialState[0], initialState[1])
 
     # Perform PCA and extract the zone of interest
     values = get_values_optimize(cube_negfc, angs, ncomp, annulus_width*fwhm,
