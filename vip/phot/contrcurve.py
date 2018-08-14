@@ -273,7 +273,6 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
             ax4.set_xlabel('Distance [pixels]')
             ax4.plot(rad_samp, cc_mags, '', alpha=0.)
             ax4.set_xlim(0, np.max(rad_samp[:-30]))
-            fig2.savefig("/Users/alan/ang_sep_dmag.pdf")
 
     datafr0 = DF(data=cont_curve_samp, columns=['sensitivity (Gauss)'])
     datafr2 = DF(data=thruput_interp, columns=['throughput'])
