@@ -180,40 +180,65 @@ def cube_derotate(array, angle_list, imlib='opencv', interpolation='lanczos4',
         number of frames).
     border_mode : str, optional
         See the documentation of the ``vip_hci.preproc.frame_rotate`` function.
-        
     Returns
     -------
     array_der : array_like
         Resulting cube with de-rotated frames.
-        
     """
-    if array.ndim != 3:
-        raise TypeError('Input array is not a cube or 3d array.')
-    n_frames = array.shape[0]
+    if not (array.ndim == 3 or array.ndim == 4):
+        raise TypeError('Input array is not a cube, 3d or 4d array.')
+    array_der = np.zeros_like(array)
 
     if nproc is None:
         nproc = cpu_count() // 2        # Hyper-threading doubles the # of cores
 
-    if nproc == 1:
-        array_der = np.zeros_like(array)
-        for i in range(n_frames):
-            array_der[i] = frame_rotate(array[i], -angle_list[i], imlib=imlib,
-                                        interpolation=interpolation, cxy=cxy,
-                                        border_mode=border_mode)
-    elif nproc > 1:
-        global data_array
-        data_array = array
+    if array.ndim == 3:
 
-        pool = Pool(processes=nproc)
-        res = pool.map(EFT, zip(itt.repeat(_cube_rotate_mp), range(n_frames),
-                                itt.repeat(angle_list), itt.repeat(imlib),
-                                itt.repeat(interpolation), itt.repeat(cxy),
-                                itt.repeat(border_mode)))
-        pool.close()
-        array_der = np.array(res)
+        n_frames = array.shape[0]
+
+        if nproc == 1:
+            
+            for i in range(n_frames):
+                array_der[i] = frame_rotate(array[i], -angle_list[i], imlib=imlib,
+                                            interpolation=interpolation, cxy=cxy)
+        elif nproc > 1:
+            global data_array
+            data_array = array
+
+            pool = Pool(processes=nproc)
+            res = pool.map(EFT, zip(itt.repeat(_cube_rotate_mp), range(n_frames),
+                                    itt.repeat(angle_list), itt.repeat(imlib),
+                                    itt.repeat(interpolation), itt.repeat(cxy)))
+            pool.close()
+            array_der = np.array(res)
+
+    if array.ndim == 4:
+
+        n_frames = array.shape[1]
+
+        if not cxy:
+            cy, cx = frame_center(array[0,0])
+            cxy = (cx, cy)
+
+        for i in range(n_frames):
+            vec_ang = np.ones((array.shape[0]))*-angle_list[i]
+            if nproc == 1:
+                array_der[:,i] = cube_derotate(array[:,i,:,:], vec_ang, imlib=imlib,
+                                               interpolation=interpolation, cxy=cxy)
+            elif nproc > 1:
+                global data_array
+                data_array = array
+
+                pool = Pool(processes=int(nproc))
+                res = pool.map(futup, itt.izip(itt.repeat(_cube_rotate_mp),
+                                               range(n_frames), itt.repeat(vec_ang),
+                                               itt.repeat(imlib),
+                                               itt.repeat(interpolation),
+                                               itt.repeat(cxy)))
+                pool.close()
+                array_der = np.array(res)
 
     return array_der
-
 
 def _cube_rotate_mp(num_fr, angle_list, imlib, interpolation, cxy, border_mode):
     framerot = frame_rotate(data_array[num_fr], -angle_list[num_fr],
