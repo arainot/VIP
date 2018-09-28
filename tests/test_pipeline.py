@@ -3,21 +3,21 @@ Tests for the post-processing pipeline, using the functional API.
 
 """
 
-from __future__ import division, print_function
+from __future__ import division, print_function, absolute_import
 
+__author__ = "Ralf Farkas"
+
+from helpers import np, parametrize, fixture
 import copy
-import numpy as np
 
 import vip_hci as vip
-
-import pytest
 
 
 def print_debug(s, *args, **kwargs):
     print(("\033[34m" + s + "\033[0m").format(*args, **kwargs))
 
 
-@pytest.fixture(scope="module")
+@fixture(scope="module")
 def injected_cube_position(example_dataset):
     """
     Inject a fake companion into an example cube.
@@ -76,7 +76,7 @@ def algo_xloci(ds):
 
     return vip.leastsq.xloci(ds.cube, ds.angles, fwhm=ds.fwhm,
                              radius_int=20)  # <- speed up
-                             
+
 
 def algo_pca(ds):
     return vip.pca.pca(ds.cube, ds.angles)
@@ -88,9 +88,7 @@ def algo_pca_annular(ds):
 
 def algo_andromeda(ds):
     res = vip.andromeda.andromeda(ds.cube, oversampling_fact=1,
-                                  angles=-ds.angles, psf=ds.psf)
-    # TODO: different angles convention!
-
+                                  angles=ds.angles, psf=ds.psf)
     contrast, snr, snr_n, stdcontrast, stdcontrast_n, likelihood, r = res
     return snr_n
 
@@ -98,9 +96,7 @@ def algo_andromeda(ds):
 def algo_andromeda_fast(ds):
     res = vip.andromeda.andromeda(ds.cube, oversampling_fact=0.5,
                                   fast=10,
-                                  angles=-ds.angles, psf=ds.psf)
-    # TODO: different angles convention!
-
+                                  angles=ds.angles, psf=ds.psf)
     contrast, snr, snr_n, stdcontrast, stdcontrast_n, likelihood, r = res
     return snr_n
 
@@ -151,18 +147,20 @@ def detect_max(frame, yx_exp, tolerance_percent=4):
     assert dist < tolerance, "Detected maximum does not match injection"
 
 
-@pytest.mark.parametrize("algo, make_detmap",
-                         [
-                            (algo_medsub, snrmap_fast),
-                            (algo_medsub, snrmap),
-                            (algo_medsub_annular, snrmap_fast),
-                            (algo_xloci, snrmap_fast),
-                            (algo_pca, snrmap_fast),
-                            (algo_pca_annular, snrmap_fast),
-                            (algo_andromeda, None),
-                         ],
-                         ids=lambda x: (x.__name__.replace("algo_", "")
-                                        if callable(x) else x))
+@parametrize(
+    "algo, make_detmap",
+    [
+        (algo_medsub, snrmap_fast),
+        (algo_medsub, snrmap),
+        (algo_medsub_annular, snrmap_fast),
+        (algo_xloci, snrmap_fast),
+        (algo_pca, snrmap_fast),
+        (algo_pca_annular, snrmap_fast),
+        (algo_andromeda, None),
+        (algo_andromeda_fast, None),
+    ],
+    ids=lambda x: (x.__name__.replace("algo_", "") if callable(x) else x)
+)
 def test_algos(injected_cube_position, algo, make_detmap):
     ds, position = injected_cube_position
     frame = algo(ds)

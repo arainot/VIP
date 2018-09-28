@@ -8,34 +8,33 @@ __all__ = ['EvalRoc',
            'compute_binary_map']
 
 import numpy as np
-from skimage.draw import circle
 from scipy import stats
 import matplotlib.pyplot as plt
 from photutils import detect_sources
-from skimage.feature import peak_local_max
 from munch import Munch
 import copy
 from ..pca.svd import _get_cumexpvar
 from ..var import frame_center, get_annulus_segments
-from ..conf import time_ini, timing, time_fin, Progressbar
-from ..var import pp_subplots as plots
+from ..conf import time_ini, timing, Progressbar
+from ..var import pp_subplots as plots, get_circle
 from .fakecomp import cube_inject_companions
 
 
 class EvalRoc(object):
-    """ Class for the generation of receiver operating characteristic (ROC)
-    curves.
     """
-    COLOR_1 = "#d62728" # CADI
-    COLOR_2 = "#ff7f0e" # PCA
-    COLOR_3 = "#2ca02c" # LLSG
-    COLOR_4 = "#9467bd" # SODIRF
-    COLOR_5 = "#1f77b4" # SODINN
-    SYMBOL_1 = "^" # CADI
-    SYMBOL_2 = "X" # PCA
-    SYMBOL_3 = "P" # LLSG
-    SYMBOL_4 = "s" # SODIRF
-    SYMBOL_5 = "p" # SODINN
+    Class for the generation of receiver operating characteristic (ROC) curves.
+    """
+
+    COLOR_1 = "#d62728"  # CADI
+    COLOR_2 = "#ff7f0e"  # PCA
+    COLOR_3 = "#2ca02c"  # LLSG
+    COLOR_4 = "#9467bd"  # SODIRF
+    COLOR_5 = "#1f77b4"  # SODINN
+    SYMBOL_1 = "^"  # CADI
+    SYMBOL_2 = "X"  # PCA
+    SYMBOL_3 = "P"  # LLSG
+    SYMBOL_4 = "s"  # SODIRF
+    SYMBOL_5 = "p"  # SODINN
     # For model PSF subtraction algos that rely on a S/N map
     THRESHOLDS_05_5 = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]
     # For algos that output a likelihood or probability map
@@ -53,7 +52,6 @@ class EvalRoc(object):
             or a function.
         [...]
         """
-        
         self.dataset = dataset
         self.plsc = plsc
         self.n_injections = n_injections
@@ -80,26 +78,25 @@ class EvalRoc(object):
 
         Notes
         -----
-        # TODO : SODIRF and SODINN+SODIRF are yet to be integrated.
-        # TODO : `methods` are not returned inside `results` and are *not* saved!
-        # TODO : order of parameters for `skewnormal` `dist_flux` changed! (was [3], [1], [2])
-        # TODO : `save` not implemented
+        # TODO `methods` are not returned inside `results` and are *not* saved!
+        # TODO order of parameters for `skewnormal` `dist_flux` changed! (was [3], [1], [2])
+        # TODO `save` not implemented
+
         """
         from .. import hci_postproc
 
         starttime = time_ini()
 
         frsize = self.dataset.cube.shape[1]
-        half_frsize = frsize // 2
 
-        #===== number of PCs for PCA / rank for LLSG
+        # ===== number of PCs for PCA / rank for LLSG
         if cevr is not None:
             ratio_cumsum, _ = _get_cumexpvar(self.dataset.cube, expvar_mode,
                                              self.inrad, self.outrad,
                                              patch_size, None, verbose=False)
             self.optpcs = np.searchsorted(ratio_cumsum, cevr) + 1
             print("{}% of CEVR with {} PCs".format(cevr, self.optpcs))
-        
+
             # for m in methods:
             #     if hasattr(m, "ncomp") and m.ncomp is None:  # PCA
             #         m.ncomp = self.optpcs
@@ -108,7 +105,7 @@ class EvalRoc(object):
             #         m.rank = self.optpcs
 
             #
-            #   -------> this should be moved inside the HCIPostProcAlgo classes!
+            #   ------> this should be moved inside the HCIPostProcAlgo classes!
             #
         # Getting indices in annulus
         width = self.outrad - self.inrad
@@ -121,7 +118,7 @@ class EvalRoc(object):
                         normal=np.random.normal,
                         uniform=np.random.uniform).get(self.dist_flux[0],
                                                        self.dist_flux[0])
-        
+
         self.fluxes = dist_fkt(*self.dist_flux[1:], size=self.n_injections)
         self.fluxes.sort()
         inds_inj = np.random.randint(0, num_patches, size=self.n_injections)
@@ -137,7 +134,7 @@ class EvalRoc(object):
             theta = np.mod(np.arctan2(injy, injx) / np.pi * 180, 360)
             self.dists.append(dist)
             self.thetas.append(theta)
-        
+
         for m in self.methods:
             m.frames = []
             m.probmaps = []
@@ -159,9 +156,9 @@ class EvalRoc(object):
 
             for m in self.methods:
                 # TODO: this is not elegant at all.
+                # shallow copy. Should not copy e.g. the cube in memory,
+                # just reference it.
                 algo = copy.copy(m.algo)
-                    # shallow copy. Should not copy e.g. the cube in memory,
-                    # just reference it.
                 _dataset = copy.copy(self.dataset)
                 _dataset.cube = cufc
 
@@ -176,15 +173,22 @@ class EvalRoc(object):
                 m.frames.append(algo.frame_final)
                 m.probmaps.append(algo.snr_map)
 
-        #fintime = time_fin(starttime)
         timing(starttime)
 
-    def compute_tpr_fps(self, npix=1, min_distance=1):
+    def compute_tpr_fps(self, **kwargs):
         """
-        Notes
-        -----
-        # TODO : `save` not implemeted (`methods` should be saved, not this
-        functions return value!)
+        Calculate number of dets/fps for every injection/method/threshold.
+
+        Take the probability maps and the desired thresholds for every method,
+        and calculates the binary map, number of detections and FPS using
+        ``compute_binary_map``. Sets each methods ``detections``, ``fps`` and
+        ``bmaps`` attributes.
+
+        Parameters
+        ----------
+        **kwargs : keyword arguments
+            Passed to ``compute_binary_map``
+
         """
         starttime = time_ini()
 
@@ -198,23 +202,40 @@ class EvalRoc(object):
             x, y = self.list_xy[i]
 
             for m in self.methods:
-                res = compute_binary_map(m.probmaps[i], m.thresholds, x, y,
-                                         npix=npix, min_distance=min_distance)
-                m.detections.append(res[0])
-                m.fps.append(res[1])
-                m.bmaps.append(res[2])
+                dets, fps, bmaps = compute_binary_map(
+                    m.probmaps[i], m.thresholds, fwhm=self.dataset.fwhm,
+                    injections=(x, y), **kwargs
+                )
+                m.detections.append(dets)
+                m.fps.append(fps)
+                m.bmaps.append(bmaps)
+
         timing(starttime)
 
     def plot_detmaps(self, i=None, thr=9, dpi=100,
                      axis=True, grid=False, vmin=-10, vmax='max',
                      plot_type="horiz"):
         """
-        i - sample or iteration : 0-self.n_injections
-        thr - threshold : 0-9
+        Plot the detection maps for one injection.
 
-        plot_type :
-            1 - One row per algorithm (frame, probmap, binmap)
-            2 - 1 row for final frames, 1 row for probmaps and 1 row for binmaps
+        Parameters
+        ----------
+        i : int or None, optional
+            Index of the injection, between 0 and self.n_injections. If None,
+            takes the 30st injection, or if there are less injections, the
+            middle one.
+        thr : int, optional
+            Index of the threshold.
+        dpi, axis, grid, vmin, vmax
+            Passed to ``pp_subplots``
+        plot_type : {"horiz" or "vert"}, optional
+            Plot type.
+
+            ``horiz``
+                One row per algorithm (frame, probmap, binmap)
+            ``vert``
+                1 row for final frames, 1 row for probmaps and 1 row for binmaps
+
         """
         # input parameters
         if i is None:
@@ -224,6 +245,7 @@ class EvalRoc(object):
                 i = len(self.list_xy) // 2
 
         if vmax == 'max':
+            # TODO: document this feature.
             vmax = np.concatenate([m.frames[i] for m in self.methods if
                                    hasattr(m, "frames") and
                                    len(m.frames) >= i]).max()/2
@@ -238,21 +260,21 @@ class EvalRoc(object):
             for m in self.methods:
                 print('detection state: {} | false postives: {}'.format(
                     m.detections[i][thr], m.fps[i][thr]))
-                plots(m.frames[i] if len(m.frames) >= i else np.zeros((2,2)),
+                plots(m.frames[i] if len(m.frames) >= i else np.zeros((2, 2)),
                       m.probmaps[i], m.bmaps[i][thr],
                       label=['{} frame'.format(m.name),
                              '{} S/Nmap'.format(m.name),
                              'Thresholded at {:.1f}'.format(m.thresholds[thr])],
                       dpi=dpi, horsp=0.2, axis=axis, grid=grid,
                       cmap=['viridis', 'viridis', 'gray'])
-        
+
         elif plot_type in [2, "vert"]:
             plots(*[m.frames[i] for m in self.methods if
                     hasattr(m, "frames") and len(m.frames) >= i], dpi=dpi,
                   label=['{} frame'.format(m.name) for m in self.methods if
-                         hasattr(m, "frames") and len(m.frames) >= i], vmax=vmax,
-                  vmin=vmin, axis=axis, grid=grid, cmap='viridis')
-            
+                         hasattr(m, "frames") and len(m.frames) >= i],
+                  vmax=vmax, vmin=vmin, axis=axis, grid=grid, cmap='viridis')
+
             plots(*[m.probmaps[i] for m in self.methods], dpi=dpi,
                   label=['{} S/Nmap'.format(m.name) for m in self.methods],
                   axis=axis, grid=grid, cmap='viridis')
@@ -301,7 +323,7 @@ class EvalRoc(object):
         n_thresholds = len(self.methods[0].thresholds)
 
         if verbose:
-            print('{} injections'.format(self.n_injections)) # really?
+            print('{} injections'.format(self.n_injections))
             # print('Flux distro : {} [{}:{}]'.format(roc_injections.flux_distribution,
             #                                         roc_injections.fluxp1, roc_injections.fluxp2))
             print('Annulus from {} to {} pixels'.format(self.inrad,
@@ -393,10 +415,11 @@ class EvalRoc(object):
                 plt.savefig('roc_curve.pdf', dpi=dpi, bbox_inches='tight')
 
 
-def compute_binary_map(frame, thresholds, injx, injy, npix=1, min_distance=1,
+def compute_binary_map(frame, thresholds, injections, fwhm, npix=1,
+                       overlap_threshold=0.7, max_blob_fact=2, plot=False,
                        debug=False):
-    """ Takes a list of ``thresholds``, creates binary maps from the
-    detection map (``frame``) and counts detections and false positives.
+    """
+    Take a list of ``thresholds``, create binary maps and counts detections/fps.
 
     Parameters
     ----------
@@ -404,80 +427,176 @@ def compute_binary_map(frame, thresholds, injx, injy, npix=1, min_distance=1,
         Detection map.
     thresholds : list or numpy.ndarray
         List of thresholds (detection criteria).
-    injx, injy : int
-        Coordinates of the injected companion.
+    injections : tuple, list of tuples
+        Coordinates (x,y) of the injected companions. Also accepts 1d/2d
+        ndarrays.
+    fwhm : float
+        FWHM, used for obtaining the size of the circular aperture centered at
+        the injection position (and measuring the overlapping with found blobs).
+        The circular aperture has 2 * FWHM in diameter.
     npix : int, optional
         The number of connected pixels, each greater than the given threshold,
         that an object must have to be detected. ``npix`` must be a positive
         integer. Passed to ``detect_sources`` function from ``photutils``.
-    min_distance : int, optional
-        Minimum number of pixels separating peaks in a region of `2 *
-        min_distance + 1` (i.e. peaks are separated by at least `min_distance`).
-        By default, `min_distance=1` (maximum number of peaks). Passed to
-        ``peak_local_max`` function from ``photutils``.
+    overlap_threshold : float
+        Percentage of overlap a blob has to have with the aperture around an
+        injection.
+    max_blob_fact : float
+        Maximum size of a blob (in multiples of the resolution element) before
+        it is considered as "too big" (= non-detection)
+    plot : bool, optional
+        If True, a final resulting plot summarizing the results will be shown.
     debug : bool, optional
         For showing optional information.
 
     Returns
     -------
-    list_detections : list
-        List of detection state (0 or 1) for each threshold.
-    list_fps : list
+    list_detections : list of int
+        List of detection count for each threshold.
+    list_fps : list of int
         List of false positives count for each threshold.
-    list_binmaps : list
+    list_binmaps : list of 2d ndarray
         List of binary maps: detection maps thresholded for each threshold
         value.
 
     Notes
     -----
-    ``min_distance = fwhm`` is problematic, when two blobs are less than fwhm
-    apart the true blob could be discarded, depending on the ordering. Not sure
-    what should be the best value here.
+    In photutils v0.5, SegmentationImage (which is returned by detect_sources)
+    has a new ``.segments`` attribute, which would simplify the handling of the
+    blobs. Once we fix the dependency to a newer version we should update this
+    function. (https://photutils.readthedocs.io/en/v0.5/api/photutils.segmentati
+    on.SegmentationImage.html#photutils.segmentation.SegmentationImage.segments)
+
+    A blob which is "too big" is split into apertures, and every aperture adds
+    one 'false positive'.
+
     """
+    def _overlap_injection_blob(injection, fwhm, blob_mask):
+        """
+        Parameters
+        ----------
+        injection: tuple (y,x)
+        fwhm : float
+        blob_mask : 2d bool ndarray
+
+        Returns
+        -------
+        overlap_fact : float between 0 and 1
+            Percentage of the area overlap. If the blob is smaller than the
+            resolution element, this is ``intersection_area / blob_area``,
+            otherwise ``intersection_area / resolution_element``.
+
+        """
+        injection_mask = get_circle(np.ones_like(blob_mask), radius=fwhm,
+                                    cy=injection[1], cx=injection[0],
+                                    mode="mask")
+        intersection = injection_mask & blob_mask
+        smallest_area = min(blob_mask.sum(), injection_mask.sum())
+        return intersection.sum() / smallest_area
+
     list_detections = []
     list_fps = []
     list_binmaps = []
+    sizey, sizex = frame.shape
+    cy, cx = frame_center(frame)
+    reselem_mask = get_circle(frame, radius=fwhm, cy=cy, cx=cx, mode="val")
+    npix_circ_aperture = reselem_mask.shape[0]
 
-    for threshold in thresholds:
-        first_segm = detect_sources(frame, threshold, npix)
-        binary_map = peak_local_max(first_segm.data, min_distance=min_distance,
-                                    indices=False)
-        final_segm = detect_sources(binary_map, 0.5, npix)
-        n_sources = final_segm.nlabels
+    # normalize injections: accepts combinations of 1d/2d and tuple/list/array.
+    injections = np.asarray(injections)
+    if injections.ndim == 1:
+        injections = np.array([injections])
+
+    for ithr, threshold in enumerate(thresholds):
         if debug:
-            plots(first_segm.data, binary_map, final_segm.data)
+            print("\nprocessing threshold #{}: {}".format(ithr + 1, threshold))
 
-        # Checking if the injection pxs match with detected blobs
-        detection = 0  # should be int for pretty output in plot_detmaps
-        for i in range(n_sources):
-            yy, xx = np.where(final_segm.data == i + 1)
-            xxyy = list(zip(xx, yy))
-            injyy, injxx = circle(injy, injx, 2)
-            coords_ind = list(zip(injxx, injyy))
-            for j in range(len(coords_ind)):
-                if coords_ind[j] in xxyy:
-                    detection = 1
-                    fps = n_sources - 1
+        segments = detect_sources(frame, threshold, npix, connectivity=4)
+        binmap = (segments.data != 0)
+
+        if debug:
+            plots(segments.data, binmap, cmap=('tab10', 'bone'),
+                  circle=[tuple(xy) for xy in injections], circlerad=fwhm,
+                  circlealpha=0.6, label=["segmentation map", "binary map"])
+
+        detections = 0
+        fps = 0
+
+        for iblob in segments.labels:
+            blob_mask = (segments.data == iblob)
+            blob_area = segments.areas[iblob - 1]
+
+            if debug:
+                plots(blob_mask, circle=[tuple(xy) for xy in injections],
+                      circlerad=fwhm, circlealpha=0.6, cmap='bone', labelsize=8,
+                      label=["blob #{}, area={}px**2".format(iblob, blob_area)])
+
+            for iinj, injection in enumerate(injections):
+                if injection[0] > sizex or injection[1] > sizey:
+                    raise ValueError("Wrong coordinates in `injections`")
+
+                if debug:
+                    print("\ttesting injection #{} at {}".format(iinj + 1,
+                                                                 injection))
+
+                if blob_area > max_blob_fact * npix_circ_aperture:
+                    number_of_apertures_in_blob = blob_area / npix_circ_aperture
+                    fps += number_of_apertures_in_blob  # float, rounded at end
+                    if debug:
+                        print("\tblob is too big (+{:.0f} fps)"
+                              "".format(number_of_apertures_in_blob))
+                        print("\tskipping all other injections")
+                    # continue with next blob, do not check other injections
                     break
 
-        if detection == 0:
-            fps = n_sources
+                overlap = _overlap_injection_blob(injection, fwhm, blob_mask)
+                if overlap > overlap_threshold:
+                    if debug:
+                        print("\toverlap of {}! (+1 detection)"
+                              "".format(overlap))
 
-        list_detections.append(detection)
-        list_binmaps.append(binary_map)
+                    detections += 1
+                    # continue with next blob, do not check other injections
+                    break
+
+                if debug:
+                    print("\toverlap of {} -> do nothing".format(overlap))
+
+            else:
+                if debug:
+                    print("\tdid not find a matching injection for this "
+                          "blob (+1 fps)")
+                fps += 1
+
+        if debug:
+            print("done with threshold #{}".format(ithr))
+            print("result: {} detections, {} fps".format(detections, fps))
+
+        fps = np.round(fps).astype(int).item()  # -> python `int`
+
+        list_detections.append(detections)
+        list_binmaps.append(binmap)
         list_fps.append(fps)
+
+    if plot:
+        labs = [str(det) + ' detections' + '\n' + str(fps) + ' false positives'
+                for det, fps in zip(list_detections, list_fps)]
+        plots(np.array(list_binmaps), title='Final binary maps', label=labs,
+              labelsize=8, cmap=['bone']*len(list_binmaps), circlealpha=0.8,
+              circle=[tuple(xy) for xy in injections], circlerad=fwhm,
+              circlecolor='deepskyblue', axis=False)
 
     return list_detections, list_fps, list_binmaps
 
 
 def _create_synt_cube(cube, psf, ang, plsc, dist, flux, theta=None,
-                     verbose=False):
+                      verbose=False):
     """
     """
     centy_fr, centx_fr = frame_center(cube[0])
     if theta is None:
         np.random.seed()
-        theta = np.random.randint(0,360)
+        theta = np.random.randint(0, 360)
 
     posy = dist * np.sin(np.deg2rad(theta)) + centy_fr
     posx = dist * np.cos(np.deg2rad(theta)) + centx_fr

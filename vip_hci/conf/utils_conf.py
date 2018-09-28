@@ -14,6 +14,8 @@ import sys
 import numpy as np
 
 import itertools as itt
+from inspect import getargspec
+from functools import wraps
 from multiprocessing import Pool
 
 from vip_hci import __version__
@@ -99,6 +101,11 @@ class Saveable(object):
                 setattr(self, k, data[k].item())  # un-pack np array
             else:
                 setattr(self, k, data[k])
+
+        # add non-saved, but expected attributes (backwards compatibility)
+        for exp_k in self._saved_attributes:
+            if exp_k not in data:
+                setattr(self, exp_k, None)
 
         return self
 
@@ -194,6 +201,72 @@ class NoProgressbar(object):
         pass
 
 
+def algo_calculates_decorator(*calculated_attributes):
+    """
+    Decorator for HCIPostProcAlgo methods, describe what they calculate.
+    
+    There are three benefits from decorating a method:
+    
+    - if ``verbose=True``, prints a message about the calculated attributes and
+      the ones which can be calculated next.
+    - the attributes which *can* be calculated by this method are tracked, so
+      if a user tries to access them *before* the function is called, an
+      informative error message can be shown
+    - the object knows which attributes to reset when ``run()`` is called a
+      second time, on a different dataset.
+
+    Parameters
+    ----------
+    *calculated_attributes : list of strings
+        Strings denominating the attributes the decorated function calculates.
+    
+    Examples
+    --------
+    
+    .. code:: python
+
+        from .conf import algo_calculates_decorator as calculates
+
+        class HCIMyAlgo(HCIPostPRocAlgo):
+            def __init__(self, my_algo_param):
+                self.store_args(locals())
+            
+            @calculates("final_frame", "snr_map")
+            def run(dataset=None, verbose=True):
+                frame, snr = my_heavy_calculation()
+                
+                self.final_frame = frame
+                self.snr_map = snr
+
+    """
+    def decorator(fkt):
+        @wraps(fkt)
+        def wrapper(self, *args, **kwargs):
+            # run the actual method
+            res = fkt(self, *args, **kwargs)
+
+            # get the kwargs the fkt sees. Note that this is a combination of
+            # the *default* kwargs and the kwargs *passed* by the user
+            a = getargspec(fkt)
+            all_kwargs = dict(zip(a.args[-len(a.defaults):], a.defaults))
+            all_kwargs.update(kwargs)
+            
+            if not hasattr(self, "_called_calculators"):
+                self._called_calculators = []
+            self._called_calculators.append(fkt.__name__)
+
+            # show help message
+            if all_kwargs.get("verbose", False):
+                self._show_attribute_help(fkt.__name__)
+
+            return res
+
+        # set an attribute on the wrapper so _get_calculations() can find it:
+        wrapper._calculates = calculated_attributes
+        return wrapper
+    return decorator
+
+
 def check_array(input_array, dim, name=None):
     """ Checks the dimensionality of input. Returns it as a np.ndarray.
 
@@ -240,6 +313,34 @@ def check_array(input_array, dim, name=None):
         else:
             if not input_array.ndim == 4:
                 raise TypeError(msg)
+
+
+def frame_or_shape(data):
+    """
+    Sanitize ``data``, always return a 2d frame.
+
+    If ``data`` is a 2d frame, it is returned unchanged. If it is a shaped,
+    return an empty array of that shape.
+
+    Parameters
+    ----------
+    data : 2d ndarray or shape tuple
+
+    Returns
+    -------
+    array : 2d ndarray
+
+    """
+    if isinstance(data, np.ndarray):
+        array = data
+        if array.ndim != 2:
+            raise TypeError('`data` is not a frame or 2d array')
+    elif isinstance(data, tuple):
+        array = np.zeros(data)
+    else:
+        raise TypeError('`data` must be a tuple (shape) or a 2d array')
+
+    return array
 
 
 def eval_func_tuple(f_args):

@@ -1,24 +1,35 @@
-vip_hci.egg-info
+# macOS stuff
+.DS_Store
+
+# optimized python files
+*.py[cod]
+_pycache__/
+
+# distribution / packaging
 build
 dist
+*.egg-info
 
+# documentation / sphinx
 docs/build
 docs/time
 
-submit_pypi.sh
-update_sphinx.sh
-
-.pytest_cache
+# unit test / coverage reports
+.coverage
 .cache
+.pytest_cache/
+htmlcov/
+
+# editors / IDEs
+.idea/
+*.sublime-project
+*.sublime-cache
+*.sublime-workspace
+.pydevproject
 .settings
 .project
-.pydevproject
-.idea
+.vscode/
 
-*.pyc
-*/*.pyc
-*/*/*.pyc
-*/*/*/*.pyc
-
-*/.idea
-*/*/.idea
+# scripts
+submit_pypi.sh
+update_sphinx.sh

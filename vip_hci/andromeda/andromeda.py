@@ -29,8 +29,9 @@ import numpy as np
 
 from ..var.filters import frame_filter_highpass, cube_filter_highpass
 from ..conf.utils_conf import pool_map, fixed
+from ..var.shapes import dist_matrix
 
-from .utils import robust_std, create_distance_matrix, idl_round, idl_where
+from .utils import robust_std, idl_round, idl_where
 from .shift import calc_psf_shift_subpix
 from .fit import fitaffine
 
@@ -59,8 +60,11 @@ def andromeda(cube, oversampling_fact, angles, psf, filtering_fraction=.25,
         the filter and the Shannon wavelength).
         IDL parameter: ``OVERSAMPLING_1_INPUT``
     angles : array_like
-        List of parallactic angles associated with each frame in ``cube``.
-        IDL parameter: ``ANGLES_INPUT``
+        List of parallactic angles associated with each frame in ``cube``. Note
+        that, compared to the IDL version, the PA convention is different: If
+        you would pass ``[1,2,3]`` to the IDL version, you should pass ``[-1,
+        -2, -3]`` to this function to obtain the same results.
+        IDL parameter: ``- ANGLES_INPUT``
     psf : 2d array_like
         The experimental PSF used to model the planet signature in the
         subtracted images. This PSF is usually a non-coronographic or saturated
@@ -213,6 +217,10 @@ def andromeda(cube, oversampling_fact, angles, psf, filtering_fraction=.25,
     global CUBE  # assigned after high-pass filter
 
     # ===== verify input
+
+    # the andromeda algorithm handles PAs differently from the other algos in
+    # VIP. This normalizes the API:
+    angles = -angles
 
     frames, npix, _ = cube.shape
     npixpsf, _ = psf.shape
@@ -665,7 +673,7 @@ def andromeda_core(diffcube, index_neg, index_pos, angles, psf_cube, rhomin,
     weighted_diff_images = diffcube * weights_diff_2d
 
     # create annuli
-    d = create_distance_matrix(npix)
+    d = dist_matrix(npix)
     select_pixels = ((d > rhomin) & (d < rhomax))
 
     if verbose:
@@ -911,7 +919,7 @@ def diff_images(cube_pos, cube_neg, rint, rext, opt_method="lsq",
     gamma = np.zeros(nimg)  # linear factor, per frame
     gamma_prime = np.zeros(nimg)  # affine factor. Only !=0 for 'l1' affine fit
 
-    distarray = create_distance_matrix(npix)
+    distarray = dist_matrix(npix)
     annulus = (distarray > rint) & (distarray <= rext)  # 2d True/False map
 
     if verbose:
@@ -1043,7 +1051,7 @@ def normalize_snr(snr, nsmooth_snr=1, iwa=None, owa=None, oversampling=None,
         dmin = np.round(iwa * 2 * oversampling).astype(int)
 
     # ===== build annulus
-    tempo = create_distance_matrix(nsnr, xcen, ycen)  # 2D ndarray
+    tempo = dist_matrix(nsnr, xcen, ycen)  # 2D ndarray
     # IDL: DIST_CIRCLE, tempo, nsnr, xcen, ycen
 
     # ===== main calculations
@@ -1194,7 +1202,7 @@ def couronne_img(image, xcen, ycen=None, lieu=None, step=0.5, rmax=None,
     intenmoy = np.zeros(rmax+1)
     intenmoy[0] = image[int(ycen), int(xcen)]  # order?
 
-    tempo = create_distance_matrix(image.shape[0], xcen, ycen)
+    tempo = dist_matrix(image.shape[0], xcen, ycen)
 
     for i in range(1, rmax+1):
         # boolean mask for annulus:
