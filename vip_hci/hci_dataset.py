@@ -4,15 +4,13 @@
 Module with HCIDataset and HCIFrame classes.
 """
 
-from __future__ import division, print_function
-
 __author__ = 'Carlos Alberto Gomez Gonzalez'
 __all__ = ['HCIDataset',
            'HCIFrame']
 
 import numpy as np
 import copy
-
+import hciplot as hp
 from .fits import open_fits
 from .preproc import (frame_crop, frame_px_resampling, frame_rotate,
                       frame_shift, frame_center_satspots, frame_center_radon)
@@ -22,9 +20,8 @@ from .preproc import (cube_collapse, cube_crop_frames, cube_derotate,
                       cube_px_resampling, cube_subsample, cube_recenter_2dfit,
                       cube_recenter_satspots, cube_recenter_radon,
                       cube_recenter_dft_upsampling, cube_recenter_via_speckles)
-from .var import frame_filter_lowpass, frame_filter_highpass, frame_center
-from .var import (cube_filter_highpass, cube_filter_lowpass, mask_circle,
-                  pp_subplots)
+from .var import (frame_filter_lowpass, frame_filter_highpass, frame_center,
+                  cube_filter_highpass, cube_filter_lowpass, mask_circle)
 from .stats import (frame_basic_stats, frame_histo_stats,
                     frame_average_radprofile, cube_basic_stats, cube_distance)
 from .metrics import (frame_quick_report, cube_inject_companions,
@@ -130,75 +127,11 @@ class HCIFrame(object):
 
         Parameters
         ----------
-        angscale : bool
-            If True, the axes are displayed in angular scale (arcsecs).
-        angticksep : int
-            Separation for the ticks when using axis in angular scale.
-        arrow : bool
-            To show an arrow pointing to input px coordinates.
-        arrowalpha : float
-            Alpha transparency for the arrow.
-        arrowlength : int
-            Length of the arrow, 20 px by default.
-        arrowshiftx : int
-            Shift in x of the arrow pointing position, 5 px by default.
-        axis : bool
-            Show the axis, on by default.
-        circle : list of tuples
-            To show a circle at given px coordinates, list of tuples.
-        circlerad : int
-            Radius of the circle, 6 px by default.
-        cmap : str
-            Colormap to be used, 'viridis' by default.
-        colorb : bool
-            To attach a colorbar, on by default.
-        cross : tuple of float
-            If provided, a crosshair is displayed at given px coordinates.
-        crossalpha : float
-            Alpha transparency of thr crosshair.
-        dpi : int
-            Dots per inch, for plot quality.
-        getfig : bool
-            Returns the matplotlib figure.
-        grid : bool
-            If True, a grid is displayed over the image, off by default.
-        gridalpha : float
-            Alpha transparency of the grid.
-        gridcolor : str
-            Color of the grid lines.
-        gridspacing : int
-            Separation of the grid lines in pixels.
-        horsp : float
-            Horizontal gap between subplots.
-        label : str or list of str
-            Text for annotating on subplots.
-        labelpad : int
-            Padding of the label from the left bottom corner.
-        labelsize : int
-            Size of the labels.
-        log : bool
-            Log colorscale.
-        maxplots : int
-            When the input (``*args``) is a 3d array, maxplots sets the number
-            of cube slices to be displayed.
-        pxscale : float
-            Pixel scale in arcseconds/px. Default 0.01 for Keck/NIRC2.
-        rows : int
-            How many rows (subplots in a grid).
-        save : str
-            If a string is provided the plot is saved using this as the path.
-        showcent : bool
-            To show a big crosshair at the center of the frame.
-        title : str
-            Title of the plot(s), None by default.
-        vmax : int
-            For stretching the displayed pixels values.
-        vmin : int
-            For stretching the displayed pixels values.
-        versp : float
-            Vertical gap between subplots.
+        **kwargs : dict, optional
+            Parameters passed to the function ``plot_frames`` of the package
+            ``HCIplot``.
         """
-        pp_subplots(self.image, **kwargs)
+        hp.plot_frames(self.image, **kwargs)
 
     def radial_profile(self, sep=1):
         """ Calculates the average radial profile of an image.
@@ -645,13 +578,24 @@ class HCIDataset(Saveable):
                                   interpolation, cxy, nproc)
         print('Cube successfully derotated')
 
-    def drop_frames(self, n, m):
-        """ Slicing the cube using the `n` (initial) and `m` (final) indices in
-        a 1-indexed fashion.
-
-        # TODO: support 4d case, documentation
+    def drop_frames(self, n, m, verbose=True):
         """
-        self.cube = cube_drop_frames(self.cube, n, m, self.angles)
+        Slice the cube so that all frames between ``n``and ``m`` are kept.
+
+        The indices ``n`` and ``m`` are included and 1-based.
+
+        Examples
+        --------
+        For a cube which has 5 frames numbered ``1, 2, 3, 4, 5``, calling
+        ``ds.drop_frames(2, 4)`` would result in the frames ``2, 3, 4`` to be
+        kept, so the first and the last frame would be discarded.
+
+        """
+        res = cube_drop_frames(self.cube, n, m, self.angles, verbose=verbose)
+        if self.angles:
+            self.cube, self.angles = res
+        else:
+            self.cube = res
 
     def filter(self, method, mode, median_size=5, kernel_size=5, fwhm_size=5,
                btw_cutoff=0.2, btw_order=2, gauss_mode='conv', verbose=True):
@@ -837,10 +781,6 @@ class HCIDataset(Saveable):
                 ``("normal", loc, scale)``
                     uses np.random.normal
 
-        check_mem : bool, optional
-            If True, verifies that the system has enough memory to store the
-            result.
-
         Yields
         -------
         fake_dataset : HCIDataset
@@ -850,12 +790,12 @@ class HCIDataset(Saveable):
 
         for data in generate_cube_copies_with_injections(
             self.cube, self.psf, self.angles, self.px_scale, n_copies=n_copies,
-            inrad=inrad, outrad=outrad, dist_flux=dist_flux, check_mem=False
+            inrad=inrad, outrad=outrad, dist_flux=dist_flux
         ):
 
             dsi = self.copy()
             dsi.cube = data["cube"]
-            dsi.injections_yx = data["position"]
+            dsi.injections_yx = data["positions"]
             # data["dist"], data["theta"], data["flux"] are not used.
 
             yield dsi
@@ -1024,86 +964,16 @@ class HCIDataset(Saveable):
         print("`fwhm` attribute set to")
         print_precision(self.fwhm)
 
-    def plot(self, wavelength=0, **kwargs):
-        """ Plotting the frames of a 3D or 4d cube (``wavelength``).
+    def plot(self, **kwargs):
+        """ Plotting the frames of a 3D or 4d cube.
 
         Parameters
         ----------
-        wavelength : int, optional
-            Index of the wavelength to be analyzed in the case of a 4d cube.
-        angscale : bool
-            If True, the axes are displayed in angular scale (arcsecs).
-        angticksep : int
-            Separation for the ticks when using axis in angular scale.
-        arrow : bool
-            To show an arrow pointing to input px coordinates.
-        arrowalpha : float
-            Alpha transparency for the arrow.
-        arrowlength : int
-            Length of the arrow, 20 px by default.
-        arrowshiftx : int
-            Shift in x of the arrow pointing position, 5 px by default.
-        axis : bool
-            Show the axis, on by default.
-        circle : list of tuples
-            To show a circle at given px coordinates, list of tuples.
-        circlerad : int
-            Radius of the circle, 6 px by default.
-        cmap : str
-            Colormap to be used, 'viridis' by default.
-        colorb : bool
-            To attach a colorbar, on by default.
-        cross : tuple of float
-            If provided, a crosshair is displayed at given px coordinates.
-        crossalpha : float
-            Alpha transparency of thr crosshair.
-        dpi : int
-            Dots per inch, for plot quality.
-        getfig : bool
-            Returns the matplotlib figure.
-        grid : bool
-            If True, a grid is displayed over the image, off by default.
-        gridalpha : float
-            Alpha transparency of the grid.
-        gridcolor : str
-            Color of the grid lines.
-        gridspacing : int
-            Separation of the grid lines in pixels.
-        horsp : float
-            Horizontal gap between subplots.
-        label : str or list of str
-            Text for annotating on subplots.
-        labelpad : int
-            Padding of the label from the left bottom corner.
-        labelsize : int
-            Size of the labels.
-        log : bool
-            Log colorscale.
-        maxplots : int
-            When the input (``*args``) is a 3d array, maxplots sets the number
-            of cube slices to be displayed.
-        pxscale : float
-            Pixel scale in arcseconds/px. Default 0.01 for Keck/NIRC2.
-        rows : int
-            How many rows (subplots in a grid).
-        save : str
-            If a string is provided the plot is saved using this as the path.
-        showcent : bool
-            To show a big crosshair at the center of the frame.
-        title : str
-            Title of the plot(s), None by default.
-        vmax : int
-            For stretching the displayed pixels values.
-        vmin : int
-            For stretching the displayed pixels values.
-        versp : float
-            Vertical gap between subplots.
+        **kwargs : dict, optional
+            Parameters passed to the function ``plot_cubes`` of the package
+            ``HCIplot``.
         """
-        if self.cube.ndim == 3:
-            pp_subplots(self.cube, **kwargs)
-        elif self.cube.ndim == 4:
-            tits = 'Wavelength '+str(wavelength + 1)
-            pp_subplots(self.cube[wavelength], title=tits, **kwargs)
+        hp.plot_cubes(self.cube, **kwargs)
 
     def recenter(self, method='2dfit', xy=None, subi_size=5, model='gauss',
                  nproc=1, imlib='opencv', interpolation='lanczos4',

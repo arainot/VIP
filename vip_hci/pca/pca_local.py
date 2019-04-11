@@ -6,8 +6,6 @@ ADI, ADI+SDI (IFS) and ADI+RDI datasets. This implementation make use of
 Python multiprocessing capabilities.
 """
 
-from __future__ import division, print_function
-
 __author__ = 'Carlos Alberto Gomez Gonzalez'
 __all__ = ['pca_annular',
            'pca_rdi_annular']
@@ -21,7 +19,7 @@ from ..preproc import cube_rescaling_wavelengths as scwave
 from ..preproc.derotation import _find_indices_adi, _define_annuli
 from ..preproc.rescaling import _find_indices_sdi
 from ..conf import time_ini, timing
-from ..conf.utils_conf import pool_map, fixed
+from ..conf.utils_conf import pool_map, iterable
 from ..var import get_annulus_segments, matrix_scaling
 from ..stats import descriptive_stats
 from .svd import get_eigenvectors
@@ -87,8 +85,8 @@ def pca_annular(cube, angle_list, scale_list=None, radius_int=0, fwhm=4,
         used in the second PCA stage (ADI fashion, using the residuals of the
         first stage). If None then the second PCA stage is skipped and the
         residuals are de-rotated and combined.
-    mode : {'lapack', 'arpack', 'eigen', 'randsvd', 'cupy', 'eigencupy',
-            'randcupy', 'pytorch', 'eigenpytorch', 'randpytorch'}, str optional
+    svd_mode : {'lapack', 'arpack', 'eigen', 'randsvd', 'cupy', 'eigencupy',
+                'randcupy', 'pytorch', 'eigenpytorch', 'randpytorch'}, optional
         Switch for the SVD method/library to be used. ``lapack`` uses the LAPACK
         linear algebra library through Numpy and it is the most conventional way
         of computing the SVD (deterministic result computed on CPU). ``arpack``
@@ -160,7 +158,7 @@ def pca_annular(cube, angle_list, scale_list=None, radius_int=0, fwhm=4,
                            interpolation, collapse, full_output, verbose)
 
         if verbose:
-            print('Done derotating and combining.')
+            print('Done derotating and combining')
             timing(start_time)
         if full_output:
             cube_out, cube_der, frame = res
@@ -190,7 +188,7 @@ def pca_annular(cube, angle_list, scale_list=None, radius_int=0, fwhm=4,
             print('{} spectral channels per IFS frame'.format(z))
             print('N annuli = {}, mean FWHM = {:.3f}'.format(n_annuli, fwhm))
 
-        res = pool_map(nproc, _pca_sdi_fr, fixed(range(n)), scale_list,
+        res = pool_map(nproc, _pca_sdi_fr, iterable(range(n)), scale_list,
                        radius_int, fwhm, asize, n_segments, delta_sep, ncomp,
                        svd_mode, tol, scaling, imlib, interpolation, collapse,
                        verbose=verbose)
@@ -377,8 +375,8 @@ def pca_rdi_annular(cube, angle_list, cube_ref, radius_int=0, asize=1, ncomp=1,
     for ann in range(n_annuli):
         inner_radius, _ = define_annuli(angle_list, ann, n_annuli, fwhm,
                                         radius_int, annulus_width, verbose)
-        indices = get_annulus(array[0], inner_radius, annulus_width,
-                              output_indices=True)
+        indices = get_annulus_segments(array[0], inner_radius, annulus_width,
+                                       nsegm=1)[0]
         yy = indices[0]
         xx = indices[1]
 
@@ -558,7 +556,7 @@ def _pca_adi_ann(cube, angle_list, radius_int=0, fwhm=4, asize=2, n_segments=1,
             matrix_segm = array[:, yy, xx]  # shape [nframes x npx_segment]
             matrix_segm = matrix_scaling(matrix_segm, scaling)
 
-            res = pool_map(nproc, do_pca_patch, matrix_segm, fixed(range(n)),
+            res = pool_map(nproc, do_pca_patch, matrix_segm, iterable(range(n)),
                            angle_list, fwhm, pa_thr, ann_center, svd_mode,
                            ncompann, min_frames_lib, max_frames_lib, tol,
                            verbose=False)

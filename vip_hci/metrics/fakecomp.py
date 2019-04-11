@@ -4,8 +4,6 @@
 Module with fake companion injection functions.
 """
 
-from __future__ import division, print_function
-
 __author__ = 'Carlos Alberto Gomez Gonzalez'
 __all__ = ['collapse_psf_cube',
            'normalize_psf',
@@ -96,7 +94,13 @@ def cube_inject_companions(array, psf_template, angle_list, flevel, plsc,
         startx = int(cenx) - w
 
         # fake companion in the center of a zeros frame
-        fc_fr[starty:starty+size_fc, startx:startx+size_fc] = psf_template
+        try:
+            fc_fr[starty:starty+size_fc, startx:startx+size_fc] = psf_template
+        except ValueError as e:
+            print("cannot place PSF on frame. Please verify the shapes! "
+                  "psf shape: {}, array shape: {}".format(psf_template.shape,
+                                                          array.shape))
+            raise e
 
         if size_fc % 2 == 0 and array.shape[1] % 2 == 1:
             # odd cube, even PSF
@@ -277,7 +281,7 @@ def generate_cube_copies_with_injections(array, psf_template, angle_list, plsc,
     inds_inj = np.random.randint(0, num_patches, size=n_copies)
 
     # Injections
-    for n in n_copies:
+    for n in range(n_copies):
 
         injx = xx[inds_inj[n]] - frame_center(array[0])[1]
         injy = yy[inds_inj[n]] - frame_center(array[0])[0]

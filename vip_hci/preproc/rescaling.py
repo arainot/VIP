@@ -3,8 +3,6 @@
 """
 Module with frame px resampling/rescaling functions.
 """
-from __future__ import division, print_function
-
 __author__ = 'Carlos Alberto Gomez Gonzalez, V. Christiaens, R. Farkas'
 __all__ = ['frame_px_resampling',
            'cube_px_resampling',
@@ -293,7 +291,8 @@ def cube_rescaling_wavelengths(cube, scal_list, full_output=True, inverse=False,
             raise ValueError("You need to provide y_in and x_in when "
                              "inverse=True!")
         siz = max(y_in, x_in)
-        frame = get_square(frame, siz, cy, cx)
+        if frame.shape[0] > siz:
+            frame = get_square(frame, siz, cy, cx)
         if full_output:
             n_z = cube.shape[0]
             array_old = cube.copy()
@@ -339,8 +338,8 @@ def _cube_resc_wave(array, scaling_list, ref_xy=None, imlib='opencv',
         Resulting cube with rescaled frames.
 
     """
-    def _scale_func(output_coords, ref_xy=0, scaling=1.0,
-                    scale_y=None, scale_x=None):
+    def _scale_func(output_coords, ref_xy=0, scaling=1.0, scale_y=None,
+                    scale_x=None):
         """
         For each coordinate point in a new scaled image (output_coords),
         coordinates in the image before the scaling are returned. This scaling

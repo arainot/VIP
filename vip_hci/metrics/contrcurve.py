@@ -4,8 +4,6 @@
 Module with contrast curve generation function.
 """
 
-from __future__ import division, print_function
-
 __author__ = 'C. Gomez, O. Absil @ ULg'
 __all__ = ['contrast_curve',
            'noise_per_annulus',
@@ -543,13 +541,13 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
 
     # We crop the PSF and check if PSF has been normalized (so that flux in
     # 1*FWHM aperture = 1) and fix if needed
-    new_psf_size = 3 * fwhm
+    new_psf_size = int(round(3 * fwhm))
     if new_psf_size % 2 == 0:
         new_psf_size += 1
 
     if cube.ndim == 3:
         n, y, x = array.shape
-        psf_template = normalize_psf(psf_template, fwhm=fwhm,
+        psf_template = normalize_psf(psf_template, fwhm=fwhm, verbose=verbose,
                                      size=min(new_psf_size,
                                               psf_template.shape[1]))
 
@@ -631,7 +629,7 @@ def throughput(cube, angle_list, psf_template, fwhm, pxscale, algo, nbranch=1,
         w, n, y, x = array.shape
         if isinstance(fwhm, (int, float)):
             fwhm = [fwhm] * w
-        psf_template = normalize_psf(psf_template, fwhm=fwhm,
+        psf_template = normalize_psf(psf_template, fwhm=fwhm, verbose=verbose,
                                      size=min(new_psf_size,
                                               psf_template.shape[1]))
 
