@@ -275,11 +275,11 @@ def contrast_curve(cube, angle_list, psf_template, fwhm, pxscale, starphot,
             ax4.set_xlim(0, np.max(rad_samp[:-30]))
 
     # print('writing')
-    # file = open('/Users/alan/Nextcloud/PhD/Thesis/SPHERE/P96_CHIPS/contrast_curves/QZCar/IRDIS/mags.txt','w')
+    # file = open('/Users/alan/Nextcloud/PhD/Thesis/SPHERE/P96_CHIPS/contrast_curves/QZCar/IFS/mags.txt','w')
     # for i in range(0,len(cc_mags)):
     #     file.write(str(cc_mags[i]) + '\n')
     # file.close()
-    # file = open('/Users/alan/Nextcloud/PhD/Thesis/SPHERE/P96_CHIPS/contrast_curves/QZCar/IRDIS/dist.txt','w')
+    # file = open('/Users/alan/Nextcloud/PhD/Thesis/SPHERE/P96_CHIPS/contrast_curves/QZCar/IFS/dist.txt','w')
     # dist = rad_samp*pxscale
     # for i in range(0,len(cc_mags)):
     #     file.write(str(dist[i]) + '\n')
