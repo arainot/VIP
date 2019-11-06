@@ -121,10 +121,10 @@ def firstguess_from_coord(planet, center, cube, angs, PLSC, psf,
     f0 = f_range[chi2r.argmin()]
 
     if display:
-        plt.figure(figsize=kwargs.pop('figsize',(8,4)))
+        plt.figure(figsize=kwargs.pop('figsize',(12,9)))
         plt.title(kwargs.pop('title',''))
-        plt.xlim(f_range[0], f_range[:chi2r.shape[0]].max())
-        plt.ylim(chi2r.min()*0.9, chi2r.max()*1.1)
+        plt.xlim(f_range[0], 500)#f_range[:chi2r.shape[0]].max())
+        plt.ylim(chi2r.min()*0.9, 0.4)
         plt.plot(f_range[:chi2r.shape[0]],chi2r,
                  linestyle = kwargs.pop('linestyle','-'),
                  color = kwargs.pop('color','gray'),
